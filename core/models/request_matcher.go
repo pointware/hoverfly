@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+
 	v2 "github.com/SpectoLabs/hoverfly/core/handlers/v2"
 	"github.com/SpectoLabs/hoverfly/core/matching/matchers"
 	"github.com/SpectoLabs/hoverfly/core/util"
@@ -144,6 +145,7 @@ func getViewFromRequestFieldMatcher(matcher *RequestFieldMatchers) *v2.MatcherVi
 type RequestMatcherResponsePair struct {
 	RequestMatcher RequestMatcher
 	Response       ResponseDetails
+	Id             string
 }
 
 func NewRequestMatcherResponsePairFromView(view *v2.RequestMatcherResponsePairViewV5) *RequestMatcherResponsePair {
@@ -160,6 +162,7 @@ func NewRequestMatcherResponsePairFromView(view *v2.RequestMatcherResponsePairVi
 			RequiresState: view.RequestMatcher.RequiresState,
 		},
 		Response: NewResponseDetailsFromResponse(view.Response),
+		Id:       view.Id,
 	}
 }
 
@@ -240,6 +243,7 @@ func (this *RequestMatcherResponsePair) BuildView() v2.RequestMatcherResponsePai
 			RequiresState: this.RequestMatcher.RequiresState,
 		},
 		Response: this.Response.ConvertToResponseDetailsViewV5(),
+		Id:       this.Id,
 	}
 }
 

@@ -125,19 +125,12 @@ func (this *SimulationHandler) DeleteWithId(w http.ResponseWriter, req *http.Req
 
 	var filtered []RequestMatcherResponsePairViewV5
 	for _, value := range simulationView.DataViewV5.RequestResponsePairs {
-		// 세팅 안한 것이나.
-		if value.RequestMatcher.Destination == nil {
+		if value.Id == "" {
 			filtered = append(filtered, value)
-			continue
-		}
-		// 세팅 했는데 아이디가 같은거
-		var idPattern = fmt.Sprintf("id-%s", id)
-		if value.RequestMatcher.Destination[0].Value.(string) == idPattern {
-		} else {
+		} else if value.Id != id {
 			filtered = append(filtered, value)
 		}
 	}
-
 	simulationView.RequestResponsePairs = filtered
 	this.Hoverfly.DeleteSimulation()
 
@@ -205,8 +198,6 @@ func (this *SimulationHandler) addSimulation(w http.ResponseWriter, req *http.Re
 func (this *SimulationHandler) addSingleSimulation(w http.ResponseWriter, req *http.Request, overrideExisting bool, id string) error {
 	body, _ := ioutil.ReadAll(req.Body)
 
-	// fmt.Printf("%s\n", body)
-
 	simulationSingleViewV1, err := NewSimulationSingleViewFromRequestBody(body)
 	if err != nil {
 		handlers.WriteErrorResponse(w, err.Error(), http.StatusBadRequest)
@@ -215,30 +206,20 @@ func (this *SimulationHandler) addSingleSimulation(w http.ResponseWriter, req *h
 
 	fmt.Printf("요청값 %+v\n\n\n\n", simulationSingleViewV1)
 
-	simulationView, err := this.Hoverfly.GetSimulation()
+	simulationView, _ := this.Hoverfly.GetSimulation()
 
 	var filtered []RequestMatcherResponsePairViewV5
 
 	for _, value := range simulationView.DataViewV5.RequestResponsePairs {
-		// 세팅 안한 것이나.
-		if value.RequestMatcher.Destination == nil {
+		if value.Id == "" {
 			filtered = append(filtered, value)
-		}
-		// 세팅 했는데 아이디가 같은거
-		var idPattern = fmt.Sprintf("id-%s", id)
-		fmt.Printf("%s\n\n\n", idPattern)
-
-		if value.RequestMatcher.Destination[0].Value == idPattern {
-			simulationSingleViewV1.RequestMatcher.Destination = append(simulationSingleViewV1.RequestMatcher.Destination, MatcherViewV5{
-				Matcher: "exact",
-				Value:   idPattern,
-			})
-			filtered = append(filtered, simulationSingleViewV1.RequestMatcherResponsePairViewV5)
-		} else {
+		} else if value.Id != id {
 			filtered = append(filtered, value)
 		}
 	}
-
+	simulationSingleViewV1.Id = id
+	filtered = append(filtered, simulationSingleViewV1.RequestMatcherResponsePairViewV5)
+	fmt.Printf("%+v|%+v\n", filtered, filtered[0].Id)
 	simulationView.DataViewV5.RequestResponsePairs = filtered
 
 	this.Hoverfly.DeleteSimulation()
