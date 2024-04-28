@@ -8,10 +8,27 @@ import (
 
 	"strings"
 
-	"github.com/SpectoLabs/hoverfly/core/handlers/v1"
+	v1 "github.com/SpectoLabs/hoverfly/core/handlers/v1"
 	log "github.com/sirupsen/logrus"
 	"github.com/xeipuuv/gojsonschema"
 )
+
+func NewSimulationSingleViewFromRequestBody(requestBody []byte) (SimulationSingleViewV1, error) {
+	var simulationSingleViewV1 SimulationSingleViewV1
+
+	jsonMap := make(map[string]interface{})
+
+	if err := json.Unmarshal(requestBody, &jsonMap); err != nil {
+		return SimulationSingleViewV1{}, errors.New("Invalid JSON")
+	}
+
+	err := json.Unmarshal(requestBody, &simulationSingleViewV1)
+	if err != nil {
+		return SimulationSingleViewV1{}, err
+	}
+
+	return simulationSingleViewV1, nil
+}
 
 func NewSimulationViewFromRequestBody(requestBody []byte) (SimulationViewV5, error) {
 	var simulationView SimulationViewV5
@@ -43,50 +60,6 @@ func NewSimulationViewFromRequestBody(requestBody []byte) (SimulationViewV5, err
 		if err != nil {
 			return SimulationViewV5{}, err
 		}
-	} else if schemaVersion == "v4" || schemaVersion == "v3" {
-		err := ValidateSimulation(jsonMap, SimulationViewV4Schema)
-		if err != nil {
-			return simulationView, errors.New(fmt.Sprintf("Invalid %s simulation: ", schemaVersion) + err.Error())
-		}
-
-		var simulationViewV4 SimulationViewV4
-
-		err = json.Unmarshal(requestBody, &simulationViewV4)
-		if err != nil {
-			return SimulationViewV5{}, err
-		}
-
-		simulationView = upgradeV4(simulationViewV4)
-	} else if schemaVersion == "v2" {
-		err := ValidateSimulation(jsonMap, SimulationViewV2Schema)
-		if err != nil {
-			return simulationView, errors.New(fmt.Sprintf("Invalid %s simulation: ", schemaVersion) + err.Error())
-		}
-
-		var simulationViewV2 SimulationViewV2
-
-		err = json.Unmarshal(requestBody, &simulationViewV2)
-		if err != nil {
-			return SimulationViewV5{}, err
-		}
-
-		simulationView = upgradeV2(simulationViewV2)
-	} else if schemaVersion == "v1" {
-		err := ValidateSimulation(jsonMap, SimulationViewV1Schema)
-		if err != nil {
-			return simulationView, errors.New("Invalid v1 simulation: " + err.Error())
-		}
-
-		var simulationViewV1 SimulationViewV1
-
-		err = json.Unmarshal(requestBody, &simulationViewV1)
-		if err != nil {
-			return SimulationViewV5{}, err
-		}
-
-		simulationView = upgradeV1(simulationViewV1)
-	} else {
-		return simulationView, fmt.Errorf("Invalid simulation: schema version %v is not supported by this version of Hoverfly, you may need to update Hoverfly", schemaVersion)
 	}
 
 	return simulationView, nil

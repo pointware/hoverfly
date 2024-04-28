@@ -4,6 +4,10 @@ import (
 	"github.com/SpectoLabs/hoverfly/core/interfaces"
 )
 
+type SimulationSingleViewV1 struct {
+	RequestMatcherResponsePairViewV5 `json:"data"`
+}
+
 type SimulationViewV5 struct {
 	DataViewV5 `json:"data"`
 	MetaView   `json:"meta"`

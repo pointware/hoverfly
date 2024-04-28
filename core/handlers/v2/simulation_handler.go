@@ -34,6 +34,10 @@ func (this *SimulationHandler) RegisterRoutes(mux *bone.Mux, am *handlers.AuthHa
 		negroni.HandlerFunc(am.RequireTokenAuthentication),
 		negroni.HandlerFunc(this.Put),
 	))
+	mux.Put("/api/v2/simulation/:id", negroni.New(
+		negroni.HandlerFunc(am.RequireTokenAuthentication),
+		negroni.HandlerFunc(this.PutWithId),
+	))
 	mux.Post("/api/v2/simulation", negroni.New(
 		negroni.HandlerFunc(am.RequireTokenAuthentication),
 		negroni.HandlerFunc(this.Post),
@@ -41,6 +45,10 @@ func (this *SimulationHandler) RegisterRoutes(mux *bone.Mux, am *handlers.AuthHa
 	mux.Delete("/api/v2/simulation", negroni.New(
 		negroni.HandlerFunc(am.RequireTokenAuthentication),
 		negroni.HandlerFunc(this.Delete),
+	))
+	mux.Delete("/api/v2/simulation/:id", negroni.New(
+		negroni.HandlerFunc(am.RequireTokenAuthentication),
+		negroni.HandlerFunc(this.DeleteWithId),
 	))
 	mux.Options("/api/v2/simulation", negroni.New(
 		negroni.HandlerFunc(this.Options),
@@ -84,6 +92,17 @@ func (this *SimulationHandler) Put(w http.ResponseWriter, req *http.Request, nex
 	this.Get(w, req, next)
 }
 
+func (this *SimulationHandler) PutWithId(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+	id := bone.GetValue(req, "id")
+	fmt.Printf("%s\n", id)
+	err := this.addSingleSimulation(w, req, true, id)
+	if err != nil {
+		return
+	}
+
+	this.Get(w, req, next)
+}
+
 func (this *SimulationHandler) Post(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
 	err := this.addSimulation(w, req, false)
 	if err != nil {
@@ -95,6 +114,44 @@ func (this *SimulationHandler) Post(w http.ResponseWriter, req *http.Request, ne
 
 func (this *SimulationHandler) Delete(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
 	this.Hoverfly.DeleteSimulation()
+
+	this.Get(w, req, next)
+}
+
+func (this *SimulationHandler) DeleteWithId(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+	id := bone.GetValue(req, "id")
+
+	simulationView, _ := this.Hoverfly.GetSimulation()
+
+	var filtered []RequestMatcherResponsePairViewV5
+	for _, value := range simulationView.DataViewV5.RequestResponsePairs {
+		// 세팅 안한 것이나.
+		if value.RequestMatcher.Destination == nil {
+			filtered = append(filtered, value)
+			continue
+		}
+		// 세팅 했는데 아이디가 같은거
+		var idPattern = fmt.Sprintf("id-%s", id)
+		if value.RequestMatcher.Destination[0].Value.(string) == idPattern {
+		} else {
+			filtered = append(filtered, value)
+		}
+	}
+
+	simulationView.RequestResponsePairs = filtered
+	this.Hoverfly.DeleteSimulation()
+
+	result := this.Hoverfly.PutSimulation(simulationView)
+	if result.Err != nil {
+		handlers.WriteErrorResponse(w, "An error occurred: "+result.Err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(result.WarningMessages) > 0 {
+		bytes, _ := util.JSONMarshal(result)
+
+		handlers.WriteResponse(w, bytes)
+		return
+	}
 
 	this.Get(w, req, next)
 }
@@ -129,6 +186,64 @@ func (this *SimulationHandler) addSimulation(w http.ResponseWriter, req *http.Re
 	result := this.Hoverfly.PutSimulation(simulationView)
 	if result.Err != nil {
 
+		log.WithFields(log.Fields{
+			"body": string(body),
+		}).Debug(result.Err.Error())
+
+		handlers.WriteErrorResponse(w, "An error occurred: "+result.Err.Error(), http.StatusInternalServerError)
+		return result.Err
+	}
+	if len(result.WarningMessages) > 0 {
+		bytes, _ := util.JSONMarshal(result)
+
+		handlers.WriteResponse(w, bytes)
+		return fmt.Errorf("import simulation result has warnings")
+	}
+	return nil
+}
+
+func (this *SimulationHandler) addSingleSimulation(w http.ResponseWriter, req *http.Request, overrideExisting bool, id string) error {
+	body, _ := ioutil.ReadAll(req.Body)
+
+	// fmt.Printf("%s\n", body)
+
+	simulationSingleViewV1, err := NewSimulationSingleViewFromRequestBody(body)
+	if err != nil {
+		handlers.WriteErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+
+	fmt.Printf("요청값 %+v\n\n\n\n", simulationSingleViewV1)
+
+	simulationView, err := this.Hoverfly.GetSimulation()
+
+	var filtered []RequestMatcherResponsePairViewV5
+
+	for _, value := range simulationView.DataViewV5.RequestResponsePairs {
+		// 세팅 안한 것이나.
+		if value.RequestMatcher.Destination == nil {
+			filtered = append(filtered, value)
+		}
+		// 세팅 했는데 아이디가 같은거
+		var idPattern = fmt.Sprintf("id-%s", id)
+		fmt.Printf("%s\n\n\n", idPattern)
+
+		if value.RequestMatcher.Destination[0].Value == idPattern {
+			simulationSingleViewV1.RequestMatcher.Destination = append(simulationSingleViewV1.RequestMatcher.Destination, MatcherViewV5{
+				Matcher: "exact",
+				Value:   idPattern,
+			})
+			filtered = append(filtered, simulationSingleViewV1.RequestMatcherResponsePairViewV5)
+		} else {
+			filtered = append(filtered, value)
+		}
+	}
+
+	simulationView.DataViewV5.RequestResponsePairs = filtered
+
+	this.Hoverfly.DeleteSimulation()
+	result := this.Hoverfly.PutSimulation(simulationView)
+	if result.Err != nil {
 		log.WithFields(log.Fields{
 			"body": string(body),
 		}).Debug(result.Err.Error())
